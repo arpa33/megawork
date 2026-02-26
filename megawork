@@ -12,9 +12,7 @@ sudo tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz"
 ---------------------------------
 echo 'export CELESTIA_CHAIN='$CELESTIA_CHAIN >> $HOME/.bash_profilefor github
 WantedBy=multi-user.target
-WantedBy=multi-user.target
-sudo apt update && sudo apt upgrade -y
-echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_go to room
+sr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_go to room
 echo 'export CELESTIA_WALLET='${CELESTIA_WALLET} >> $HOME/.bash_profile
 source $HOME/.bash_profilepruning_keep_recent="100" 
 pruning_interval="10"
@@ -22,6 +20,9 @@ sudo apt install curl tar wget clang pkg-config libssl-dev jq build-essential bs
 sudo rm -rf /usr/local/go
 ------------------------------------------------
 for bridge
+WantedBy=multi-user.target
+sudo apt update && sudo apt upgrade -y
+echo "export PATH=$PATH:/u
 # Builds a Windows installer with NSIS.
 # It expects the following command line arguments:
 # - OUTPUTFILE, filename of the installer (without extension)
