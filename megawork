@@ -1,7 +1,4 @@
 {CELESTIA_NODENAME} >>
-.
-
-
 {CELESTIA_NODENAME} >> $HOME/.bash_profile echo "export
 -------------------------------
 pruning_keep_recent="100" 
@@ -37,7 +34,6 @@ cp $HOME/networks/mamaki/genesis.json $HOME/.celestia-app/config/
 sed -i 's/mode = \"full\"/mode = \"validator\"/g' $HOME/.celestia-app/config/config.toml
 source $HOME/.bash_profile
 ------------------------------------------------
-
 echo 'export CELESTIA_CHAIN='$CELESTIA_CHAIN >> $HOME/.bash_profile
 echo 'export CELESTIA_NODENAME='${CELESTIA_NODENAME} >> $HOME/.bash_profile
 -----------------------------------------------------------
@@ -92,3 +88,6 @@ s/^pruning-interval *=.*/pruning-interval = \"$pruning_interval\"/" $HOME/.celes
         )],
         Json(json!(AggregatedResponse {
             data_root_proof: succinct_data.merkle_branch,
+BOOTSTRAP_PEERS=$(curl -sL https://raw.githubusercontent.com/celestiaorg/networks/master/mamaki/bootstrap-peers.txt | tr -d '\n')
+sudo apt install curl tar wget clang pkg-config libssl-dev jq build-essential bsdmainutils git make ncdu -n
+sourcecho "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_go to room
