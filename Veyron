@@ -1,0 +1,296 @@
+veyron/
+├── src/
+│   ├── analyzers/
+│   │   ├── code.ts
+│   │   ├── dependencies.ts
+│   │   ├── git.ts
+│   │   └── structure.ts
+│   ├── core/
+│   │   ├── analyzer.ts
+│   │   ├── config.ts
+│   │   └── reporter.ts
+│   ├── cli.ts
+│   └── index.ts
+├── tests/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── package.json
+├── tsconfig.json
+├── README.md
+├── LICENSE
+└── .gitignore
+import fs from "node:fs/promises";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const exec = promisify(execFile);
+
+export interface RepositoryReport {
+  name: string;
+  files: number;
+  directories: number;
+  languages: Record<string, number>;
+  dependencies: number;
+  git: {
+    branch: string;
+    commits: number;
+    contributors: number;
+  };
+  health: {
+    score: number;
+    issues: string[];
+  };
+}
+
+const IGNORED = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  "coverage",
+]);
+
+const EXTENSIONS: Record<string, string> = {
+  ".ts": "TypeScript",
+  ".tsx": "TypeScript",
+  ".js": "JavaScript",
+  ".jsx": "JavaScript",
+  ".py": "Python",
+  ".go": "Go",
+  ".rs": "Rust",
+  ".java": "Java",
+  ".kt": "Kotlin",
+  ".swift": "Swift",
+  ".sol": "Solidity",
+  ".json": "JSON",
+  ".md": "Markdown",
+};
+
+async function walk(
+  directory: string,
+  files: string[] = []
+): Promise<string[]> {
+  const entries = await fs.readdir(directory, {
+    withFileTypes: true,
+  });
+
+  for (const entry of entries) {
+    if (IGNORED.has(entry.name)) continue;
+
+    const fullPath = path.join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      await walk(fullPath, files);
+    } else {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+async function analyzeLanguages(
+  files: string[]
+): Promise<Record<string, number>> {
+  const languages: Record<string, number> = {};
+
+  for (const file of files) {
+    const extension = path.extname(file).toLowerCase();
+    const language = EXTENSIONS[extension];
+
+    if (!language) continue;
+
+    languages[language] = (languages[language] ?? 0) + 1;
+  }
+
+  return languages;
+}
+
+async function readDependencies(
+  repository: string
+): Promise<number> {
+  try {
+    const packageFile = path.join(repository, "package.json");
+    const content = await fs.readFile(packageFile, "utf8");
+    const pkg = JSON.parse(content);
+
+    return (
+      Object.keys(pkg.dependencies ?? {}).length +
+      Object.keys(pkg.devDependencies ?? {}).length
+    );
+  } catch {
+    return 0;
+  }
+}
+
+async function analyzeGit(repository: string) {
+  try {
+    const { stdout: branch } = await exec(
+      "git",
+      ["branch", "--show-current"],
+      { cwd: repository }
+    );
+
+    const { stdout: commits } = await exec(
+      "git",
+      ["rev-list", "--count", "HEAD"],
+      { cwd: repository }
+    );
+
+    const { stdout: contributors } = await exec(
+      "git",
+      ["shortlog", "-sn", "--all"],
+      { cwd: repository }
+    );
+
+    return {
+      branch: branch.trim() || "detached",
+      commits: Number(commits.trim()) || 0,
+      contributors: contributors
+        .split("\n")
+        .filter(Boolean).length,
+    };
+  } catch {
+    return {
+      branch: "unknown",
+      commits: 0,
+      contributors: 0,
+    };
+  }
+}
+
+function calculateHealth(
+  files: string[],
+  dependencies: number,
+  git: RepositoryReport["git"]
+) {
+  let score = 100;
+  const issues: string[] = [];
+
+  const hasReadme = files.some(
+    (file) => path.basename(file).toLowerCase() === "readme.md"
+  );
+
+  const hasLicense = files.some(
+    (file) => path.basename(file).toLowerCase() === "license"
+  );
+
+  const hasTests = files.some((file) =>
+    /test|spec/i.test(file)
+  );
+
+  if (!hasReadme) {
+    score -= 15;
+    issues.push("README is missing");
+  }
+
+  if (!hasLicense) {
+    score -= 10;
+    issues.push("License is missing");
+  }
+
+  if (!hasTests) {
+    score -= 20;
+    issues.push("No test files detected");
+  }
+
+  if (dependencies > 50) {
+    score -= 5;
+    issues.push("Large dependency surface");
+  }
+
+  if (git.commits === 0) {
+    score -= 20;
+    issues.push("No Git history detected");
+  }
+
+  return {
+    score: Math.max(score, 0),
+    issues,
+  };
+}
+
+export async function analyzeRepository(
+  repository: string
+): Promise<RepositoryReport> {
+  const absolutePath = path.resolve(repository);
+  const files = await walk(absolutePath);
+
+  const languages = await analyzeLanguages(files);
+  const dependencies = await readDependencies(absolutePath);
+  const git = await analyzeGit(absolutePath);
+
+  const health = calculateHealth(
+    files,
+    dependencies,
+    git
+  );
+
+  return {
+    name: path.basename(absolutePath),
+    files: files.length,
+    directories: new Set(
+      files.map((file) => path.dirname(file))
+    ).size,
+    languages,
+    dependencies,
+    git,
+    health,
+  };
+}
+
+function printReport(report: RepositoryReport) {
+  console.log("\n╭──────────────────────────────╮");
+  console.log("│          VEYRON              │");
+  console.log("│   Repository Intelligence    │");
+  console.log("╰──────────────────────────────╯\n");
+
+  console.log(`Repository   : ${report.name}`);
+  console.log(`Files        : ${report.files}`);
+  console.log(`Directories  : ${report.directories}`);
+  console.log(`Dependencies : ${report.dependencies}`);
+
+  console.log("\nLanguages:");
+  for (const [language, count] of Object.entries(
+    report.languages
+  )) {
+    console.log(`  ${language.padEnd(14)} ${count}`);
+  }
+
+  console.log("\nGit:");
+  console.log(`  Branch       ${report.git.branch}`);
+  console.log(`  Commits      ${report.git.commits}`);
+  console.log(`  Contributors ${report.git.contributors}`);
+
+  console.log(`\nHealth Score  : ${report.health.score}/100`);
+
+  if (report.health.issues.length > 0) {
+    console.log("\nIssues:");
+    for (const issue of report.health.issues) {
+      console.log(`  • ${issue}`);
+    }
+  }
+
+  console.log("");
+}
+
+async function main() {
+  const repository = process.argv[2] ?? ".";
+
+  try {
+    const report = await analyzeRepository(repository);
+    printReport(report);
+  } catch (error) {
+    console.error(
+      "Failed to analyze repository:",
+      error instanceof Error ? error.message : error
+    );
+
+    process.exit(1);
+  }
+}
+
+main();
